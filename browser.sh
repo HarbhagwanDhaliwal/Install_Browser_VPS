@@ -1,55 +1,67 @@
 #!/bin/bash
 
-# Check if Docker is installed
-if ! command -v docker &> /dev/null; then
-    echo "Docker is not installed."
-    read -p "Press Enter to install Docker..."
-    echo "Installing Docker..."
-    curl -fsSL https://get.docker.com -o get-docker.sh
-    sh get-docker.sh
-    rm get-docker.sh
-    echo "Docker installed successfully."
-else
-    echo "Docker is already installed."
+# Ensure the script is run with appropriate permissions
+if [[ $EUID -ne 0 ]]; then
+    echo "Please run this script as root or using sudo."
+    exit 1
 fi
+
+# Function to install Docker
+install_docker() {
+    if ! command -v docker &> /dev/null; then
+        echo "Docker is not installed."
+        read -p "Press Enter to install Docker..."
+        echo "Installing Docker..."
+        curl -fsSL https://get.docker.com -o get-docker.sh
+        sh get-docker.sh
+        rm get-docker.sh
+        echo "Docker installed successfully."
+    else
+        echo "Docker is already installed."
+    fi
+}
 
 # Function to install Chromium
 install_chromium() {
-    if docker ps -a | grep -q chromium; then
+    if docker ps -a --format '{{.Names}}' | grep -q "^chromium$"; then
         echo "Chromium is already installed."
     else
-        read -p "Enter username for Chromium : " USERNAME
-        read -sp "Enter password for Chromium : " PASSWORD
+        read -p "Enter username for Chromium: " USERNAME
+        read -sp "Enter password for Chromium: " PASSWORD
         echo
         echo "Installing Chromium..."
         docker run -d \
             --name=chromium \
-            --security-opt seccomp=unconfined `#optional` \
+            --security-opt seccomp=unconfined \
             -e PUID=1000 \
             -e PGID=1000 \
             -e TZ=Etc/UTC \
-            -e CUSTOM_USER=$USERNAME \
-            -e PASSWORD=$PASSWORD \
-            -e CHROME_CLI=https://www.youtube.com/@IR_TECH/ `#optional` \
+            -e CUSTOM_USER="$USERNAME" \
+            -e PASSWORD="$PASSWORD" \
+            -e CHROME_CLI="https://www.youtube.com/@IR_TECH/" \
             -p 3050:3050 \
             -v /root/chromium/config:/config \
             --shm-size="1gb" \
             --restart unless-stopped \
             lscr.io/linuxserver/chromium:latest
-        echo "------------------------------------------------------------------------------------------------"
-        echo "Chromium installed successfully."
-        IP=$(hostname -I | awk '{print $1}')
-        echo " "
-        echo "Use browser with http://$IP:3050"
+
+        if [[ $? -eq 0 ]]; then
+            echo "------------------------------------------------------------------------------------------------"
+            echo "Chromium installed successfully."
+            IP=$(hostname -I | awk '{print $1}')
+            echo " "
+            echo "Use browser at: http://$IP:3050"
+        else
+            echo "Failed to install Chromium. Please check your Docker configuration."
+        fi
     fi
 }
 
 # Function to uninstall Chromium
 uninstall_chromium() {
-    if docker ps -a | grep -q chromium; then
+    if docker ps -a --format '{{.Names}}' | grep -q "^chromium$"; then
         echo "Uninstalling Chromium..."
-        docker stop chromium
-        docker rm chromium
+        docker stop chromium && docker rm chromium
         echo "Chromium uninstalled."
     else
         echo "Chromium is not installed."
@@ -58,61 +70,68 @@ uninstall_chromium() {
 
 # Function to install Firefox
 install_firefox() {
-    if docker ps -a | grep -q firefox; then
+    if docker ps -a --format '{{.Names}}' | grep -q "^firefox$"; then
         echo "Firefox is already installed."
     else
-        read -p "Enter username for Firefox : " USERNAME
-        read -sp "Enter password for Firefox : " PASSWORD
+        read -p "Enter username for Firefox: " USERNAME
+        read -sp "Enter password for Firefox: " PASSWORD
         echo
         echo "Installing Firefox..."
         docker run -d \
             --name=firefox \
-            --security-opt seccomp=unconfined `#optional` \
+            --security-opt seccomp=unconfined \
             -e PUID=1000 \
             -e PGID=1000 \
             -e TZ=Etc/UTC \
-            -e CUSTOM_USER=$USERNAME \
-            -e PASSWORD=$PASSWORD \
+            -e CUSTOM_USER="$USERNAME" \
+            -e PASSWORD="$PASSWORD" \
             -p 4000:3000 \
             -p 4001:3001 \
             -v /root/firefox/config:/config \
             --shm-size="1gb" \
             --restart unless-stopped \
             lscr.io/linuxserver/firefox:latest
-        echo "------------------------------------------------------------------------------------------------"
-        echo "Firefox installed successfully."
-        IP=$(hostname -I | awk '{print $1}')
-        echo " "
-        echo "Use browser with http://$IP:4000"
+
+        if [[ $? -eq 0 ]]; then
+            echo "------------------------------------------------------------------------------------------------"
+            echo "Firefox installed successfully."
+            IP=$(hostname -I | awk '{print $1}')
+            echo " "
+            echo "Use browser at: http://$IP:4000"
+        else
+            echo "Failed to install Firefox. Please check your Docker configuration."
+        fi
     fi
 }
 
 # Function to uninstall Firefox
 uninstall_firefox() {
-    if docker ps -a | grep -q firefox; then
+    if docker ps -a --format '{{.Names}}' | grep -q "^firefox$"; then
         echo "Uninstalling Firefox..."
-        docker stop firefox
-        docker rm firefox
+        docker stop firefox && docker rm firefox
         echo "Firefox uninstalled."
     else
         echo "Firefox is not installed."
     fi
 }
 
-# Display the menu
+# Ensure Docker is installed before proceeding
+install_docker
+
+# Display menu
 echo "Select an option:"
 echo "1) Install Chromium"
 echo "2) Uninstall Chromium"
 echo "3) Install Firefox"
 echo "4) Uninstall Firefox"
 echo "5) Exit"
-read -p "Please choose : " choice
+read -p "Please choose: " choice
 
 case $choice in
     1) install_chromium ;;
     2) uninstall_chromium ;;
     3) install_firefox ;;
     4) uninstall_firefox ;;
-    5) exit ;;
+    5) exit 0 ;;
     *) echo "Invalid choice. Please select a valid option." ;;
 esac
